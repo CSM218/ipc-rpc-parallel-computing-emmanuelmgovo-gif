@@ -86,7 +86,24 @@ class Grader:
             return False
 
         try:
-            proc = subprocess.run(cmd, cwd=repo_root, capture_output=True, timeout=300, text=True, shell=shell)
+            # Set environment to ensure JAVA_HOME is correct
+            build_env = os.environ.copy()
+            
+            # On Windows, find java and set JAVA_HOME if not already set
+            if sys.platform.startswith('win'):
+                if 'JAVA_HOME' not in build_env or not os.path.exists(os.path.join(build_env.get('JAVA_HOME', ''), 'bin')):
+                    # Try to find java executable
+                    try:
+                        result = subprocess.run(['where', 'java'], capture_output=True, text=True, shell=True)
+                        if result.returncode == 0 and result.stdout.strip():
+                            java_exe = result.stdout.strip().split('\n')[0]
+                            java_home = os.path.dirname(os.path.dirname(java_exe))
+                            build_env['JAVA_HOME'] = java_home
+                            print(f"[BUILD] Set JAVA_HOME to {java_home}")
+                    except:
+                        pass
+            
+            proc = subprocess.run(cmd, cwd=repo_root, capture_output=True, timeout=300, text=True, shell=shell, env=build_env)
             # write log always for visibility
             with open(gradle_log_path, 'w', encoding='utf-8') as f:
                 f.write(proc.stdout or '')
