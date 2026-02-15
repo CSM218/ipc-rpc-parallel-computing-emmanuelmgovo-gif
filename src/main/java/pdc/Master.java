@@ -42,6 +42,7 @@ public class Master {
         DataOutputStream dos;
         long lastHeartbeatTime;
         boolean available;
+        final Object writeLock = new Object();
 
         WorkerConnection(String workerId, Socket socket) throws IOException {
             this.workerId = workerId;
@@ -160,10 +161,12 @@ public class Master {
                         worker.lastHeartbeatTime = System.currentTimeMillis();
                         worker.available = true;
 
-                        // Send heartbeat ack
+                        // Send heartbeat ack (thread-safe)
                         Message heartbeatAck = new Message("HEARTBEAT_ACK", "MASTER", new byte[0]);
-                        worker.dos.write(heartbeatAck.pack());
-                        worker.dos.flush();
+                        synchronized (worker.writeLock) {
+                            worker.dos.write(heartbeatAck.pack());
+                            worker.dos.flush();
+                        }
                     }
                 } catch (EOFException e) {
                     break;
@@ -247,10 +250,12 @@ public class Master {
                         deadWorkers.add(entry.getKey());
                     } else if (worker.available) {
                         try {
-                            // Send heartbeat
+                            // Send heartbeat (thread-safe)
                             Message hb = new Message("HEARTBEAT", "MASTER", new byte[0]);
-                            worker.dos.write(hb.pack());
-                            worker.dos.flush();
+                            synchronized (worker.writeLock) {
+                                worker.dos.write(hb.pack());
+                                worker.dos.flush();
+                            }
                             worker.lastHeartbeatTime = now;
                         } catch (IOException e) {
                             worker.available = false;
@@ -361,8 +366,10 @@ public class Master {
             matrixToString(task.dataB));
 
         Message taskMsg = new Message("RPC_REQUEST", "MASTER", 
-            payload.getBytes(StandardCharsets.UTF_8));
-
+        synchronized (worker.writeLock) {
+            worker.dos.write(taskMsg.pack());
+            worker.dos.flush();
+        }
         worker.dos.write(taskMsg.pack());
         worker.dos.flush();
         System.out.println("[Master] Sent task to worker: " + workerId);

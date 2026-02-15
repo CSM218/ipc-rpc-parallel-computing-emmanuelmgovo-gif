@@ -28,6 +28,7 @@ public class Worker implements Runnable {
     private Socket socket;
     private DataInputStream dis;
     private DataOutputStream dos;
+    private final Object writeLock = new Object();
     private final ExecutorService taskExecutor = Executors.newFixedThreadPool(4);
     private final BlockingQueue<Message> incomingTasks = new LinkedBlockingQueue<>();
 
@@ -48,10 +49,12 @@ public class Worker implements Runnable {
         dis = new DataInputStream(socket.getInputStream());
         dos = new DataOutputStream(socket.getOutputStream());
 
-        // Send registration message
+        // Send registration message (thread-safe)
         Message regMsg = new Message("REGISTER_WORKER", workerId, new byte[0]);
-        dos.write(regMsg.pack());
-        dos.flush();
+        synchronized (writeLock) {
+            dos.write(regMsg.pack());
+            dos.flush();
+        }
 
         // Wait for acknowledgment
         Message ackMsg = Message.readFromStream(dis);
@@ -87,10 +90,12 @@ public class Worker implements Runnable {
                         // Queue task for execution
                         incomingTasks.offer(msg);
                     } else if (msg.type.equals("HEARTBEAT")) {
-                        // Respond to heartbeat
+                        // Respond to heartbeat (thread-safe)
                         Message hbAck = new Message("HEARTBEAT", workerId, new byte[0]);
-                        dos.write(hbAck.pack());
-                        dos.flush();
+                        synchronized (writeLock) {
+                            dos.write(hbAck.pack());
+                            dos.flush();
+                        }
                     }
                 } catch (EOFException e) {
                     System.out.println("[Worker " + workerId + "] Master closed connection");
@@ -129,12 +134,12 @@ public class Worker implements Runnable {
             // Execute matrix multiplication
             int[][] result = multiplyMatrices(matrixA, matrixB);
 
-            // Send result back to master
+            // Send result back to master (thread-safe)
             String resultPayload = taskId + "|" + matrixToString(result);
             Message resultMsg = new Message("TASK_COMPLETE", workerId,
                 resultPayload.getBytes(StandardCharsets.UTF_8));
 
-            synchronized (dos) {
+            synchronized (writeLock) {
                 dos.write(resultMsg.pack());
                 dos.flush();
             }
