@@ -6,6 +6,11 @@ import os
 import subprocess
 from pathlib import Path
 
+# Force UTF-8 output on Windows
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    sys.stdout.reconfigure(encoding='utf-8')
+
 # Add test directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'autograder', 'tests'))
 
